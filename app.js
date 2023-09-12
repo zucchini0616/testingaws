@@ -1,39 +1,49 @@
 const express = require('express');
-const bodyParser = require('body-parser');
-const mysql = require('mysql');
-
+const sqlite3 = require('sqlite3').verbose();
 const app = express();
-const port = 80;
+const cors = require('cors');
+const port = 3000;
 
-app.use(bodyParser.json());
+// Create or open the SQLite database
+const db = new sqlite3.Database('mydb.sqlite');
 
-const db = mysql.createConnection({
-  host: 'localhost',
-  user: 'your_mysql_user',
-  password: 'your_mysql_password',
-  database: 'userdb',
+// Create the 'users' table if it doesn't exist
+db.serialize(() => {
+  db.run("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, email TEXT)");
 });
-
-db.connect((err) => {
-  if (err) throw err;
-  console.log('Connected to MySQL database');
-});
-
+app.use(cors());
+app.use(express.urlencoded({ extended: true }));
+app.use(express.json()); 
+// API to fetch all users
 app.get('/api/users', (req, res) => {
-  db.query('SELECT * FROM users', (err, results) => {
-    if (err) throw err;
-    res.json(results);
+  db.all('SELECT * FROM users', (err, rows) => {
+    if (err) {
+      res.status(500).json({ error: err.message });
+      return;
+    }
+    res.json(rows);
   });
 });
 
+// API to create a new user
 app.post('/api/users', (req, res) => {
+  console.log('Received POST request to /api/users');
   const { name, email } = req.body;
-  db.query('INSERT INTO users (name, email) VALUES (?, ?)', [name, email], (err, result) => {
-    if (err) throw err;
-    res.json({ message: 'User added', id: result.insertId });
+  if (!name || !email) {
+    res.status(400).json({ error: 'Name and email are required' });
+    return;
+  }
+
+  db.run('INSERT INTO users (name, email) VALUES (?, ?)', [name, email], (err) => {
+    if (err) {
+      res.status(500).json({ error: err.message });
+      return;
+    }
+    res.json({ message: 'User created successfully' });
   });
 });
 
+// Start the server
 app.listen(port, () => {
-  console.log(`Backend API listening on port ${port}`);
+  console.log(`Server is running on port ${port}`);
 });
